@@ -1,0 +1,51 @@
+write sq_block:
+    if(can_write):
+        if (reg_not_full):
+            wite to  reg;
+        else
+            add on top;
+    else:
+        do nothing;
+end 
+
+read sq_block:
+    if (can _read):
+        out == array[current_address];
+        array[current_address] == empty
+    else:
+        do nothing;
+end
+
+// optional
+check_reg_full block:
+    if (reg_is_not_full):
+        full_reg = 0;
+    else:
+        full_reg = 1;
+end
+
+rest sq_block:
+    if (rest_is_true):
+        rest conditions;
+    else
+    rd_reg <= rd_next 
+end 
+
+combination_block 
+    if read_conunt =128
+        read_conunt=0;
+    else 
+        read_count +1;
+
+    case(write, read)
+        00(machine idel)
+        01(read only):
+            read next;
+        10(write only): 
+            write_adress is something;
+        11(read and write):
+            if (write_add >= read)
+                cannot write 
+            else 
+                read and write go at the same time;
+end 

@@ -1,121 +1,198 @@
-module fifo # (parameter abits = 4, dbits = 3)(
+module fifo # (parameter abits =7, dbits = 64)(
     input clock,
     input reset,
-    input wr,
-    input rd,
-  input [dbits-1:0] din,
-    output empty,
-    output full,
-  output [dbits-1:0] dout
+    input  m_axis_tready,
+    input  s_axis_tvalid,
+    input  [dbits-1:0] din,
+    output s_axis_tready,
+    output  m_axis_tvalid,
+    output reg [dbits-1:0] dout
     );
 
-wire db_wr, db_rd;
-reg dffw1, dffw2, dffr1, dffr2;
-reg [dbits-1:0] out;
 
-//----------------assigning the write and read signal --------------------------
+// reg [dbits-1:0] out;
+wire wr_en;
+wire db_rd;
 
-always @ (posedge clock) dffw1 <= wr; 
-always @ (posedge clock) dffw2 <= dffw1;
+reg out_s;
+reg out_m;
 
-assign db_wr = ~dffw1 & dffw2; //monostable multivibrator to detect only one pulse of the button
+reg [dbits-1:0] regarray[2**abits-1:0] ;//number of words in fifo = 2^(number of address bits)
+reg [dbits-1:0] test_array[2**abits-1:0];
+reg [dbits-1:0] input_s;
 
-always @ (posedge clock) dffr1 <= rd;
-always @ (posedge clock) dffr2 <= dffr1;
+reg [dbits-1:0] test_reg_write;
+reg [dbits-1:0] test_reg_read;
+reg test_run;
+reg [dbits-1:0] write_sum; 
 
-assign db_rd = ~dffr1 & dffr2; //monostable multivibrator to detect only one pulse of the button
-//----------------[END] assigning the write and read signal --------------------------
+reg dffw1, dffw2, dffr1, dffr2,input_valid ; 
+integer i;
 
-reg [dbits-1:0] regarray[2**abits-1:0]; //number of words in fifo = 2^(number of address bits)
-reg [abits-1:0] wr_reg, wr_next, wr_succ; //points to the register that needs to be written to
-reg [abits-1:0] rd_reg, rd_next, rd_succ; //points to the register that needs to be read from
-reg full_reg, empty_reg, full_next, empty_next;
 
-//********** We dont need this condition****************
-assign wr_en = db_wr & ~full; //only write if write signal is high and fifo is not full
+
+//----------------assigning the write and read signal --------
+
+always @ (posedge clock) dffw1 <= s_axis_tvalid & input_valid ; 
+always @ (posedge clock) dffw2 <= s_axis_tready; 
+
+assign wr_en =  dffw1 & dffw2;
+
+always @ (posedge clock) dffr1 <= m_axis_tvalid; 
+always @ (posedge clock) dffr2 <= m_axis_tready; 
+
+assign db_rd =  dffr1 & dffr2;
+ 
+
+// set up memory 
+ 
+reg [abits-1:0] wr_reg;//wr_next, wr_succ; //points to the register that needs to be written to
+reg [abits-1:0] rd_reg,rd_next, rd_succ; //points to the register that needs to be read from
 
 //always block for write operation
 always @ (posedge clock)
  begin
-  if(wr_en)
-   regarray[wr_reg] <= din;  //at wr_reg location of regarray store what is given at din
-
- end
+  if(wr_en) //_________________what should the else be?__________
+    
+    
+    
+    
+    // #90 //this delay needs to be calculated.
+    
+    if (regarray[wr_reg]=== 64'b0000000000000000000000000000000000000000000000000000000000000000)
+      
+      regarray[wr_reg] <= input_s;
+      
+    else 
+      regarray[wr_reg][31:0] <= regarray[wr_reg][31:0]+ input_s[31:0];
+  else 
+   input_valid <= 0;
+   
+     
+end
  
 //always block for read operation
 always @ (posedge clock)
  begin
   if(db_rd)
-   out <= regarray[rd_reg];
- end
- 
+    dout <= regarray[rd_reg];
+    test_reg_read <=regarray[rd_reg];
+    regarray[rd_reg] <=0;
 
+end
+
+
+ 
+//rest condition  
 always @ (posedge clock or posedge reset)
  begin
   if (reset)
    begin
    wr_reg <= 0;
    rd_reg <= 0;
-   full_reg <= 1'b0;
-   empty_reg <= 1'b1;
+   input_valid <= 1; 
+
+   for (i=0; i<8; i=i+1) regarray[i] <= 64'b0000000000000000000000000000000000000000000000000000000000000000;
+
+
    end
   
   else
    begin
-   wr_reg <= wr_next; //created the next registers to avoid the error of mixing blocking and non blocking assignment to the same signal
-   rd_reg <= rd_next;
-   full_reg <= full_next;
-   empty_reg <= empty_next;
+    write_sum <= regarray[wr_reg]; 
+   
+    
+    //created the next registers to avoid the error of mixing blocking and non blocking assignment to the same signal
+    rd_reg <= rd_next;
+
+    //condition for s_axis_tready, here we just hard code it 
+    out_s <= 1;
+
+    //condition for  m_axis_tvalid, here we just hard code it
+    //if.....then....
+    out_m <=1;
+
+    if (s_axis_tvalid == 0)
+      input_s <=0;
+
+    else
+      input_s <= din; 
+    
+
    end
  end
- 
-always @(*)
+
+//this block is used to make wr_rn is spike than a continous 1.
+ always @(din) 
  begin
-  wr_succ = wr_reg + 1; //assigned to new value as wr_next cannot be tested for in same always block
-  rd_succ = rd_reg + 1; //assigned to new value as rd_next cannot be tested for in same always block
-  wr_next = wr_reg;  //defaults state stays the same
-  rd_next = rd_reg;  //defaults state stays the same
-  full_next = full_reg;  //defaults state stays the same
-  empty_next = empty_reg;  //defaults state stays the same
+
+   input_valid =1 ; 
+
+   
+ end
+
+
+always @ (*) //comb block 
+ begin
+
+
+  if(rd_reg == 128)
+
+    rd_reg = 0;
   
-   case({db_wr,db_rd})
-    //2'b00: do nothing LOL..
+  else
+   
+    rd_succ = rd_reg + 1;
+    rd_next = rd_reg;
+  
+
+  case({wr_en,db_rd})
+    //2'b00: do nothing ..
     
-    2'b01: //read
+    2'b01: //read only
      begin
-      if(~empty) //if fifo is not empty continue
-       begin
-        rd_next = rd_succ;
-        full_next = 1'b0;
-       if(rd_succ == wr_reg) //all data has been read
-         empty_next = 1'b1;  //its empty again
-       end
+     rd_next = rd_succ;
+
+
      end
     
-    2'b10: //write
+    2'b10: //write only 
      begin
-      
-      if(~full) //if fifo is not full continue
-       begin
-        wr_next = wr_succ;
-        empty_next = 1'b0;
-        if(wr_succ == (2**abits-1)) //all registers have been written to
-         full_next = 1'b1;   //its full now
-       end
+
+     wr_reg = din[40:32]; 
+     input_valid <= 0; 
+    
+     
+
+     
+    
      end
      
     2'b11: //read and write
      begin
-      wr_next = wr_succ;
+
+      wr_reg = din[40:32]; 
+      if (rd_succ  <= wr_reg)
+        out_s =  0;
+      else
+        out_s = 1;
+
+      
       rd_next = rd_succ;
+
+
      end
-     //no empty or full flag will be checked for or asserted in this state since data is being written to and read from together it can  not get full in this state.
-    endcase
-   
+    
+  endcase
 
- end
 
-assign full = full_reg;
-assign empty = empty_reg;
-assign dout = out;
+
+end 
+ 
+
+//condition for output singal 
+assign s_axis_tready = out_s;
+assign m_axis_tvalid = out_m;
+
+
 endmodule

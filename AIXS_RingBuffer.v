@@ -29,6 +29,9 @@ fifo axis_buffer_im
 
 )
 
+    initial begin
+        
+    end
 
 
 endmodule
