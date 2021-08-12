@@ -9,13 +9,11 @@ module fifo # (parameter abits =7, dbits = 64)(
     output reg [dbits-1:0] dout
     );
 
+wire wr_en; //can we write to buffer 
+wire db_rd; //can model read from the buffer 
 
-// reg [dbits-1:0] out;
-wire wr_en;
-wire db_rd;
-
-reg out_s;
-reg out_m;
+reg out_s; //s_axis_tready
+reg out_m; //m_axis_tvalid
 
 reg [dbits-1:0] regarray[2**abits-1:0] ;//number of words in fifo = 2^(number of address bits)
 reg [dbits-1:0] test_array[2**abits-1:0];
@@ -26,14 +24,14 @@ reg [dbits-1:0] test_reg_read;
 reg test_run;
 reg [dbits-1:0] write_sum; 
 
-reg dffw1, dffw2, dffr1, dffr2,input_valid ; 
+reg dffw1, dffw2, dffr1, dffr2,input_write_once ; 
 integer i;
 
 
 
 //----------------assigning the write and read signal --------
 
-always @ (posedge clock) dffw1 <= s_axis_tvalid & input_valid ; 
+always @ (posedge clock) dffw1 <= s_axis_tvalid & input_write_once ; 
 always @ (posedge clock) dffw2 <= s_axis_tready; 
 
 assign wr_en =  dffw1 & dffw2;
@@ -52,10 +50,7 @@ reg [abits-1:0] rd_reg,rd_next, rd_succ; //points to the register that needs to 
 //always block for write operation
 always @ (posedge clock)
  begin
-  if(wr_en) //_________________what should the else be?__________
-    
-    
-    
+  if(wr_en) 
     
     // #90 //this delay needs to be calculated.
     
@@ -66,7 +61,7 @@ always @ (posedge clock)
     else 
       regarray[wr_reg][31:0] <= regarray[wr_reg][31:0]+ input_s[31:0];
   else 
-   input_valid <= 0;
+   input_write_once <= 0;
    
      
 end
@@ -90,7 +85,7 @@ always @ (posedge clock or posedge reset)
    begin
    wr_reg <= 0;
    rd_reg <= 0;
-   input_valid <= 1; 
+   input_write_once <= 1; 
 
    for (i=0; i<8; i=i+1) regarray[i] <= 64'b0000000000000000000000000000000000000000000000000000000000000000;
 
@@ -105,10 +100,10 @@ always @ (posedge clock or posedge reset)
     //created the next registers to avoid the error of mixing blocking and non blocking assignment to the same signal
     rd_reg <= rd_next;
 
-    //condition for s_axis_tready, here we just hard code it 
+    //condition for s_axis_tready, here we just hard code it to 1
     out_s <= 1;
 
-    //condition for  m_axis_tvalid, here we just hard code it
+    //condition for  m_axis_tvalid, here we just hard code it to 1 
     //if.....then....
     out_m <=1;
 
@@ -126,7 +121,7 @@ always @ (posedge clock or posedge reset)
  always @(din) 
  begin
 
-   input_valid =1 ; 
+   input_write_once =1 ; 
 
    
  end
@@ -160,11 +155,8 @@ always @ (*) //comb block
      begin
 
      wr_reg = din[40:32]; 
-     input_valid <= 0; 
+     input_write_once = 0; 
     
-     
-
-     
     
      end
      
@@ -172,19 +164,17 @@ always @ (*) //comb block
      begin
 
       wr_reg = din[40:32]; 
-      if (rd_succ  <= wr_reg)
-        out_s =  0;
-      else
-        out_s = 1;
-
-      
       rd_next = rd_succ;
-
+      // write address is bigger than read address, then stop write. read has the priority
+      if (rd_succ  <= wr_reg)
+        input_s =  0;
+  
+      
+      
 
      end
     
   endcase
-
 
 
 end 
